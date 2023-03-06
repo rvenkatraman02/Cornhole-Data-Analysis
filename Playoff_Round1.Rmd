@@ -1,0 +1,590 @@
+---
+title: "Cornhole_2021_stats"
+author: "Rohan"
+date: "2023-02-26"
+output:
+html_document: default
+---
+
+```{r, warning = FALSE, message=FALSE}
+library(readr)
+library(dplyr)
+library(scales)
+library(DT)
+library(kableExtra)
+library(ggplot2)
+```
+
+# Data Cleaning
+
+```{r}
+# Pull Data
+
+Master <- read.csv("master.csv", header=TRUE, skip=1)
+Game_scores <- read.csv("Game_scores.csv", header=TRUE)
+Round_scores <- read.csv("Round_scores.csv", header=TRUE)
+
+Master$Match <- as.factor(Master$Match)
+Master$Round <- as.factor(Master$Round)
+Master$Throw_Number <- as.factor(Master$Throw_Number)
+Master$Bag_Number <- as.factor(Master$Bag_Number)
+```
+
+```{r}
+# Merge Data
+
+Cornhole <- merge(Master, Round_scores, by.x = c("Match", "Round"), by.y = c("Game_Number", "Round_Number"))
+Cornhole <- merge(Cornhole, Game_scores, by.x = "Match", by.y = "Game_Number")
+Cornhole <- Cornhole%>%
+  select(-c("Player_1.y", "Player_2.y"))
+```
+
+
+## Data Preview
+
+```{r}
+head(Master)
+```
+
+
+# Data Configuration
+
+
+## Variable Breakdown by Throws
+
+```{r}
+Throw_breakdown <- Master%>%
+  group_by(Throw_Number)%>%
+  summarise(total = n(),
+            in_hole_pct = round(sum(In_Hole)/total*100,1),
+            on_board_pct = round(sum(On_Board)/total*100,1),
+            missed_board_pct = round(sum(Missed_Board)/total*100,1),
+            avg_Own_bags_dragged = sum(Own_Other_Bags_Dragged_In)/total,
+            avg_Opponent_Bags_Dragged_In = sum(Opponent_Bags_Dragged_In)/total,
+            avg_Own_Other_Bags_Knocked_Off = sum(Own_Other_Bags_Knocked_Off)/total,
+            avg_Opponent_Other_Bags_Knocked_Off = sum(Opponent_Other_Bags_Knocked_Off)/total,
+            Hole_Blocked_Before_Throw_pct = round(sum(as.numeric(Hole_Blocked_Before_Throw))/total*100,1),
+            Hole_Blocked_After_pct = round(sum(Hole_Blocked_After_Throw)/total*100,1))
+
+Throw_breakdown
+```
+
+
+## Basic Toss statistics by Thrower and Match
+
+```{r, warning=FALSE, message=FALSE}
+Throw_breakdown_by_game <- Master%>%
+  group_by(Match, Thrower)%>%
+  summarise(total = n(),
+            in_hole_pct = round(sum(In_Hole)/total*100,1),
+            on_board_pct = round(sum(On_Board)/total*100,1),
+            missed_board_pct = round(sum(Missed_Board)/total*100,1),
+            avg_Own_bags_dragged = sum(Own_Other_Bags_Dragged_In)/total,
+            avg_Opponent_Bags_Dragged_In = sum(Opponent_Bags_Dragged_In)/total,
+            avg_Own_Other_Bags_Knocked_Off = sum(Own_Other_Bags_Knocked_Off)/total,
+            avg_Opponent_Other_Bags_Knocked_Off = sum(Opponent_Other_Bags_Knocked_Off)/total,
+            Hole_Blocked_Before_Throw_pct = round(sum(as.numeric(Hole_Blocked_Before_Throw))/total*100,1),
+            Hole_Blocked_After_pct = round(sum(Hole_Blocked_After_Throw)/total*100,1))
+
+Throw_breakdown_by_game <- Throw_breakdown_by_game%>%
+  select(1,2,4,5,6)
+
+Throw_breakdown_by_game
+```
+
+
+## Visualizing a Round
+
+```{r}
+plot(Throw_breakdown$Throw_Number, Throw_breakdown$in_hole_pct, xlab = "Throw", ylab = "in hole percentage")
+```
+
+```{r}
+plot(Throw_breakdown$Throw_Number, Throw_breakdown$Hole_Blocked_Before_Throw_pct, xlab = "Throw", ylab = "Hole Blocked For Throw")
+```
+
+
+# Analysis with Metrics
+
+
+## Throw Skill
+
+### Average Toss Score (ATS)
+
+```{r, warning=FALSE, message=FALSE}
+# By round average toss score
+by_round_ATS <- Cornhole%>%
+  group_by(Match, Round, Thrower)%>%
+  summarise(ATS = (sum(On_Board) + 3*sum(In_Hole))/4)
+
+# By game average toss score
+by_game_ATS <- Cornhole%>%
+  group_by(Match, Thrower)%>%
+  summarise(total_throws = n(),
+            ATS = (sum(On_Board) + 3*sum(In_Hole))/total_throws)%>%
+  ungroup()
+```
+
+
+## Board Management
+
+### Cluttering
+
+#### Blocks Created (BC)
+
+```{r, warning=FALSE, message=FALSE}
+# By round blocks created
+by_round_BC <- Cornhole%>%
+  group_by(Match, Round, Thrower)%>%
+  summarise(BC = sum(Strategic_Block_Created))
+by_round_BC
+
+# by game blocks created
+by_game_BC <- Cornhole%>%
+  group_by(Match, Thrower)%>%
+  summarise(total_throws = n(),
+            BC = sum(Strategic_Block_Created),
+            NBC = BC/total_throws)
+by_game_BC
+```
+
+
+#### Net Score after Block (NSAB)
+
+```{r}
+# Blocks in relation to winning
+
+blocks_created_breakdown <- Cornhole%>%
+  filter(Strategic_Block_Created == 1)%>%
+  select(Match, Round, Throw_Number, Thrower, Round_Winner)%>%
+  mutate(winning_block = ifelse(Round_Winner == Thrower, 1, 0))%>%
+  group_by(Throw_Number)%>%
+  summarise(total = n(),
+            win_pct = sum(winning_block)/total)
+
+blocks_table <- Cornhole%>%
+  filter(Strategic_Block_Created == 1)%>%
+  select(Match, Round, Throw_Number, Thrower, Round_Winner)%>%
+  mutate(winning_block = ifelse(Round_Winner == Thrower, 1, 0))
+```
+
+```{r}
+# Add final round scores to a table
+final_round_scores <- Master%>%
+  filter(Throw_Number == 8)%>%
+  select(1,2,8,9)%>%
+  rename("Player1_Final_Score" = Player1_Round_Score)%>%
+  rename("Player2_Final_Score" = Player2_Round_Score)
+```
+
+```{r}
+# Create a master table that includes player scores after a block (NSAB)
+block_master <- Master%>%
+  select(c(1:9,19:21))%>%
+  mutate(Thrower_score_at_block = ifelse(Strategic_Block_Created == 1, ifelse(Thrower == Player_1, Player1_Round_Score, Player2_Round_Score), -1))%>%
+  mutate(Opponent_score_at_block = ifelse(Strategic_Block_Created == 1, ifelse(Thrower == Player_1, Player2_Round_Score, Player1_Round_Score), -1))%>%
+  merge(final_round_scores, by = c("Match", "Round"))%>%
+  filter(Strategic_Block_Created == 1)%>%
+  mutate(Thrower_Score_Diff = ifelse(Thrower == Player_1, Player1_Final_Score - Thrower_score_at_block, Player2_Final_Score - Thrower_score_at_block))%>%
+  mutate(Opponent_Score_Diff = ifelse(Thrower == Player_1, Player2_Final_Score - Opponent_score_at_block, Player1_Final_Score - Opponent_score_at_block))%>%
+  select(-c(3,8:12))%>%
+  mutate(net_score_after_block = Thrower_Score_Diff - Opponent_Score_Diff)
+
+mean(block_master$Thrower_score_at_block - block_master$Opponent_score_at_block)
+mean(block_master$net_score_after_block)
+```
+
+```{r, warning=FALSE, message=FALSE}
+## Block recovery score (NSAB)
+by_game_NSAB <- block_master%>%
+  group_by(Match, Thrower)%>%
+  summarise(blocks = n(),
+            total_NSAB = sum(net_score_after_block),
+            NSAB_per_block = mean(net_score_after_block))
+
+double_blocks <- blocks_table%>%
+  group_by(Match, Round)%>%
+  summarise(n = n())
+
+by_round_NSAB <- block_master%>%
+  group_by(Match, Round, Thrower)%>%
+  summarise(blocks = n(),
+            total_NSAB = sum(net_score_after_block),
+            NSAB_per_block = mean(net_score_after_block))
+```
+
+```{r}
+# Output number of blocks per throw and winning percentage if person created block on that round
+blocks_created_breakdown
+plot(blocks_created_breakdown$total, blocks_created_breakdown$win_pct)
+text(blocks_created_breakdown$total, blocks_created_breakdown$win_pct, labels = blocks_created_breakdown$Throw_Number)
+```
+
+
+### Cleaning
+
+#### Board Impact (BI)
+
+```{r, warning=FALSE, message=FALSE}
+# By round board impact
+by_round_BI <- Cornhole%>%
+  group_by(Match, Round, Thrower)%>%
+  summarise(flat_BI = sum(Opponent_Other_Bags_Knocked_Off) + sum(Own_Other_Bags_Knocked_Off) + sum(Own_Other_Bags_Dragged_In) + sum(Opponent_Bags_Dragged_In),
+            thrower_on_board = sum(On_Board))%>%
+  group_by(Match, Round)%>%
+  mutate(total_on_board = sum(thrower_on_board), 
+         BI = flat_BI / total_on_board)%>%
+  select(Match, Thrower, flat_BI, BI)
+by_round_BI
+
+# By game board impact
+by_game_BI <- Cornhole%>%
+  group_by(Match, Thrower)%>%
+  summarise(flat_BI = sum(Opponent_Other_Bags_Knocked_Off) + sum(Own_Other_Bags_Knocked_Off) + sum(Own_Other_Bags_Dragged_In) + sum(Opponent_Bags_Dragged_In),
+            thrower_on_board = sum(On_Board))%>%
+  group_by(Match)%>%
+  mutate(total_on_board = sum(thrower_on_board), 
+         BI = flat_BI / total_on_board)%>%
+  select(Match, Thrower, flat_BI, BI, total_on_board)
+by_game_BI
+```
+
+
+#### Net Board Score (NBS)
+
+```{r, warning=FALSE, message=FALSE}
+# By round net board score
+by_round_NBS <- Cornhole%>%
+  group_by(Match, Round, Thrower)%>%
+  summarise(flat_NBS = sum(Opponent_Other_Bags_Knocked_Off) - sum(Own_Other_Bags_Knocked_Off) + 2*sum(Own_Other_Bags_Dragged_In) - 2*sum(Opponent_Bags_Dragged_In))
+by_round_NBS
+
+# By game net board score
+by_game_NBS <- Cornhole%>%
+  group_by(Match, Thrower)%>%
+  summarise(flat_NBS = sum(Opponent_Other_Bags_Knocked_Off) - sum(Own_Other_Bags_Knocked_Off) + 2*sum(Own_Other_Bags_Dragged_In) - 2*sum(Opponent_Bags_Dragged_In),
+            thrower_on_board = sum(On_Board))%>%
+  group_by(Match)%>%
+  mutate(total_on_board = sum(thrower_on_board), 
+         norm_NBS = flat_NBS / total_on_board)%>%
+  select(Match, Thrower, flat_NBS, norm_NBS)
+by_game_NBS
+```
+
+
+#### Overall Board Management Score (BMS)
+
+```{r}
+# Create overall board management score by combining NBS and NSAB metrics
+
+# By match board management score
+by_game_BMS <- by_game_BC%>%
+  merge(by_game_BI, by = c("Match", "Thrower"))%>%
+  merge(by_game_NBS, by = c("Match", "Thrower"))%>%
+  merge(by_game_NSAB, by = c("Match", "Thrower"))%>%
+  select(-BC)%>%
+  mutate(won = as.factor(c(0,1,1,0,0,1,1,0,0,1,0,1,0,1,1,0,0,1)))%>%
+  mutate(NBS_per_throw = flat_NBS / total_throws)%>%
+  mutate(BMS = NBS_per_throw + NSAB_per_block)
+by_game_BMS
+
+# Board management score based on result (win/loss)
+BMS_by_result <- by_game_BMS%>%
+  group_by(won)%>%
+  summarise(avg_BMS = mean(BMS),
+            avg_NBS = mean(NBS_per_throw),
+            avg_NSAB = mean(NSAB_per_block),
+            var_NBS = sd(NBS_per_throw),
+            var_NSAB = sd(NSAB_per_block),
+            var_BMS = sd(BMS))
+BMS_by_result
+```
+
+
+##### Prepare Table to plot BMS vs. ATS
+
+```{r, warning=FALSE, message=FALSE}
+# Manipulate table to only necessary columns, and add initials column
+by_game_player_stats <- by_game_BMS%>%
+  merge(by_game_ATS, by = c("Match", "Thrower", "total_throws"))
+by_game_player_stats$Thrower_initials <- sapply(strsplit(by_game_player_stats$Thrower, " "), function(x) paste0(substr(x, 1, 1), collapse = ""))
+by_game_player_stats$Thrower_initials <- ifelse(by_game_player_stats$won == 1,
+                                                 paste0(by_game_player_stats$Thrower_initials, "*"),
+                                                 by_game_player_stats$Thrower_initials)
+```
+
+
+# Summary Figures
+
+
+## Tables
+
+```{r}
+by_game_stats <- by_game_ATS%>%
+  merge(by_game_BC, by = c("Match", "Thrower"))%>%
+  merge(by_game_BI, by = c("Match", "Thrower"))%>%
+  merge(by_game_NBS, by = c("Match", "Thrower"))%>%
+  merge(by_game_NSAB, by = c("Match", "Thrower"))%>%
+  merge(Throw_breakdown_by_game, by = c("Match", "Thrower"))%>%
+  mutate(won = as.factor(c(0,1,1,0,0,1,1,0,0,1,0,1,0,1,1,0,0,1)))%>%
+  select(-total_throws.y)%>%
+  rename("total_throws" = total_throws.x)%>%
+  mutate(Toss_Score = ATS*total_throws)%>%
+  mutate(NBS_per_throw = flat_NBS / total_throws)%>%
+  mutate(BMS = NBS_per_throw + NSAB_per_block)%>%
+  select(-BC)
+
+by_game_stats
+```
+
+
+### Final Table (Pretty)
+
+```{r}
+# Cleaned up final output table
+pretty_final_table <- by_game_stats%>%
+  select(-c(norm_NBS, Toss_Score, total_on_board))%>%
+  rename("Player" = Thrower, "Total Throws" = total_throws, "Average Toss Score" = ATS, "Blocks" = blocks, "Blocks per Throw" = NBC,  "Bags Affected" = flat_BI, "Board Impact" = BI, "Net Board Score" = flat_NBS, "NBS per Throw" = NBS_per_throw, "Net Score After Block" = total_NSAB, "NSAB per Block" = NSAB_per_block, "Board Management Score" = BMS, "Result" = won, "In Hole %" = in_hole_pct, "On Board %" = on_board_pct, "Missed Board %" = missed_board_pct)
+
+pretty_final_table[, "Result"] = ifelse(pretty_final_table$Result == 1, "Winner", "Loser")
+
+pretty_final_table1 <- pretty_final_table[, c(1,2,3,12,13,14,4,9,5,6,7,8,16,10,11,17,15)]
+
+pretty_final_table1[, "Average Toss Score"] = round(pretty_final_table1$`Average Toss Score`, 3)
+pretty_final_table1[, "Blocks per Throw"] = round(pretty_final_table1$`Blocks per Throw`, 3)
+pretty_final_table1[, "NBS per Throw"] = round(pretty_final_table1$`NBS per Throw`, 3)
+pretty_final_table1[, "NSAB per Block"] = round(pretty_final_table1$`NSAB per Block`, 3)
+pretty_final_table1[, "Board Management Score"] = round(pretty_final_table1$`Board Management Score`, 3)
+
+pretty_final_table1[, "Board Impact"] = percent(pretty_final_table1$`Board Impact`, .1)
+pretty_final_table1[, "In Hole %"] = percent(pretty_final_table1$`In Hole %`/100, .1)
+pretty_final_table1[, "On Board %"] = percent(pretty_final_table1$`On Board %`/100, .1)
+pretty_final_table1[, "Missed Board %"] = percent(pretty_final_table1$`Missed Board %`/100, .1)
+
+pretty_final_table1
+```
+
+
+#### Colorful pretty final table
+
+```{r}
+# create the table
+pretty_final_table1 %>%
+  kable("html", escape = F) %>%
+  kable_styling(full_width = F, 
+                bootstrap_options = "striped", 
+                font_size = 16,
+                stripe_color = "#F0F0F0") %>%
+  add_header_above(c("Match Details" = 2, "Tossing Ability" = 5, "Board Management" = 9, "Result" = 1), 
+                   background = "#9fc5e8") %>%
+  # format header row
+  row_spec(0, bold = T, 
+           background = "#9fc5e8", 
+           color = "black") %>%
+  # format first column header
+  column_spec(1:2, bold = T)
+```
+
+
+### Final Winner table
+
+```{r}
+# Table with the winner statistics for our created metrics
+final_2way <- pretty_final_table %>%
+  group_by(Result) %>%
+  summarise(
+    "Average Toss Score" = round(mean(`Average Toss Score`), 3),
+    "In Hole %" = percent(mean(`In Hole %`)/100, .1),
+    "On Board %" = percent(mean(`On Board %`)/100, .1),
+    "Missed Board %" = percent(mean(`Missed Board %`)/100, .1),
+    "Blocks per Throw" = round(mean(`Blocks per Throw`), 3),
+    "NBS per Throw" = round(mean(`NBS per Throw`), 3),
+    "Board Impact" = percent(mean(`Board Impact`), .1),
+    "NSAB per Block" = round(mean(`NSAB per Block`), 3),
+    "Board Management Score" = round(mean(`Board Management Score`), 3)
+  )
+final_2way
+```
+
+#### Colorful Final Winner table
+
+```{r}
+# create the table
+final_2way %>%
+  kable("html", escape = F) %>%
+  kable_styling(full_width = F, 
+                bootstrap_options = "striped", 
+                font_size = 16,
+                stripe_color = "#F0F0F0") %>%
+  add_header_above(c("Result" = 1, "Tossing Ability" = 4, "Board Management" = 5), 
+                   background = "#9fc5e8") %>%
+  # format header row
+  row_spec(0, bold = T, 
+           background = "#9fc5e8", 
+           color = "black") %>%
+  # format first column header
+  column_spec(1, bold = T)
+```
+
+
+### Final Game Scores (Pretty)
+
+```{r}
+# Cleaned up game scores table
+Game_scores2 <- Game_scores%>%
+  rename("Match" = Game_Number, "Player 1" = Player_1, "Player 2" = Player_2, "Player 1 Score" = Player_1_Final_Score, "Player 2 Score" = Player_2_Final_Score)
+```
+
+#### Colorful Final Game Scores table
+
+```{r}
+# create the table
+Game_scores2 %>%
+  kable("html", escape = F) %>%
+  kable_styling(full_width = F, 
+                bootstrap_options = "striped", 
+                font_size = 16,
+                stripe_color = "#F0F0F0") %>%
+  # format header row
+  row_spec(0, bold = T, 
+           background = "#9fc5e8", 
+           color = "black") %>%
+  # format first column header
+  column_spec(1, bold = T)
+```
+
+
+## Plots
+
+
+### In Hole Freq Pretty Plot
+
+```{r, warning=FALSE, message=FALSE}
+# Define color palette
+professional_colors <- c("#0072B2", "#f28e2b")
+
+# Create ggplot object
+in_hole_by_throw_plot <- ggplot(Throw_breakdown, aes(x = Throw_Number, y = in_hole_pct)) +
+  
+  # Add scatter plot with filled circles and alpha
+  geom_point(size = 3, shape = 21, fill = professional_colors[1], alpha = 0.8, color = "white") +
+  
+  # Add a line plot with a thick line
+  geom_line(size = 1.5, color = professional_colors[2]) +
+  
+  # Add x and y axis labels
+  labs(x = "Throw", y = "In Hole Frequency") +
+
+  # Change theme to use professional colors and add gridlines
+  theme_minimal(base_size = 16) +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f5f5f5", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    axis.line = element_line(color = "black", size = 1),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black", size = 18),
+    plot.title = element_text(color = "black", size = 24, hjust = 0.5),
+    legend.position = "none"
+  )
+ 
+# Add gridlines
+in_hole_by_throw_plot +
+  ggtitle("In Hole Frequency by Throw") +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed", size = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+#ggsave("InHole_Freq.png")
+```
+
+
+### Hole Blocked Pretty Plot
+
+```{r, warning=FALSE, message=FALSE}
+# Define color palette
+professional_colors <- c("#0072B2", "#f28e2b")
+
+# Create ggplot object
+blocked_by_throw_plot <- ggplot(Throw_breakdown, aes(x = Throw_Number, y = Hole_Blocked_Before_Throw_pct)) +
+
+  # Add scatter plot with filled circles and alpha
+  geom_point(size = 3, shape = 21, fill = professional_colors[1], alpha = 0.8, color="white") +
+
+  # Add a line plot with a thick line
+  geom_line(size = 1.5, color = professional_colors[2]) +
+
+  # Add x and y axis labels
+  labs(x = "Throw", y = "Blocked Hole Frequency") +
+
+  # Change theme to use professional colors and add gridlines
+  theme_minimal(base_size = 16) +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f5f5f5", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    axis.line = element_line(color = "black", size = 1),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black", size = 18),
+    plot.title = element_text(color = "black", size = 24, hjust = 0.5),
+    legend.position = "none"
+  )
+
+# Add gridlines
+blocked_by_throw_plot +
+  ggtitle("Blocked Hole Frequency by Throw") +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed", size = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+#ggsave("Block_Freq.png")
+```
+
+ 
+### BMS vs. ATS Plot
+
+```{r}
+# Create a ggplot object with the data and aesthetics
+p <- ggplot(by_game_player_stats, aes(x = BMS, y = ATS, color = Match, label = Thrower_initials, fontface = ifelse(won == 1, "bold", "plain")))
+
+# Add points to the plot
+p <- p + geom_point(size = 3)
+
+# Add x and y axis labels
+p <- p + labs(x = "Board Management Score", y = "Average Throw Score")
+
+# Set x-axis increments
+p <- p + scale_x_continuous(breaks = seq(-2, 2, by = 0.5))
+
+# Set y-axis increments
+p <- p + scale_y_continuous(breaks = seq(1.4, 2.6, by = 0.2))
+
+# Change theme to use professional colors and add gridlines
+p <- p + theme_minimal(base_size = 16) +
+  theme(
+    panel.grid.major = element_line(color = "gray", linetype = "dashed", size = 0.5),
+    panel.grid.minor = element_blank(),
+    panel.background = element_rect(fill = "#f5f5f5", color = NA),
+    plot.background = element_rect(fill = "white", color = NA),
+    axis.line = element_line(color = "black", size = 1),
+    axis.text = element_text(color = "black"),
+    axis.title = element_text(color = "black", size = 18),
+    plot.title = element_text(color = "black", size = 24, hjust = 0.5),
+    legend.position = "right",
+    legend.title = element_text(face = "bold", size = 13)
+  )
+
+# Add labels to the points
+p <- p + geom_text(nudge_x = 0.05, nudge_y = 0.05)
+
+# Add a title to the plot
+p <- p + ggtitle("BMS vs ATS by Match")
+
+p
+
+#ggsave("BMS_v_ATS.png")
+```
