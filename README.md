@@ -8,7 +8,7 @@ As you will read more in our final report, we manually tracked over 1,000 observ
 In this repository, you will find our raw data, our manipulated data sets, our Rmd notebook file, and finally, our final report, which talks about our process and conclusions.
 
 ### Files in this Repository
-`XX.csv`: Raw data from the 2021 DraftKings cornhole tournament. <br>
+`/Data_Files/Playoffs 1_Cornhole_Raw_Data.csv`: Raw data from the 2021 DraftKings cornhole tournament. <br>
 `XX.csv`: Manipulated data sets based on the raw data. <br>
 `XX.Rmd`: Rmd notebook file with our analysis. <br>
 `XX.md`: Final report with our process and conclusions. <br>
