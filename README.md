@@ -8,10 +8,10 @@ As you will read more in our final report, we manually tracked over 1,000 observ
 In this repository, you will find our raw data, our manipulated data sets, our Rmd notebook file, and finally, our final report, which talks about our process and conclusions.
 
 ### Files in this Repository
-`/Data_Files/Playoffs 1_Cornhole_Raw_Data.csv`: Raw data collected from 2021 ACL World Champoionship video. <br>
+`/Data_Files/Cornhole_Raw_Data.csv`: Raw data collected from 2021 ACL World Champoionship video. <br>
 `/Data_Files/Game_scores.csv`: Final scores from each match. <br>
 `/Data_Files/Round_scores.csv`: Final scores from each round. <br>
 `Playoff_Round1.Rmd`: R notebook file with our analysis and output figures. <br>
-`Playoffs 1_ Cornhole_Report.pdf`: Final report with our process and conclusions. <br>
+`Cornhole_Final_Report.pdf`: Final report with our process and conclusions. <br>
 
 Please refer to our final report for more information on our analysis and findings.
